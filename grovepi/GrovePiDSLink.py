@@ -300,4 +300,4 @@ class GrovePiDSLink(DSLink):
         return Value.build_enum(i)
 
 if __name__ == "__main__":
-    GrovePiDSLink(Configuration(name="GrovePi", responder=True, no_save_nodes=True))
+    GrovePiDSLink(Configuration(name="GrovePi", responder=True))
