@@ -3,30 +3,41 @@ import grovepi
 import grove_rgb_led
 from twisted.internet import reactor
 
-sensors = {
-    "D2": ["digital", 2],
-    "D3": ["pwm", 3],
-    "D4": ["digital", 4],
-    "D5": ["pwm", 5],
-    "D6": ["pwm", 6],
-    "D7": ["digital", 7],
-    "D8": ["digital", 8],
-    "A0": ["analog", 0],
-    "A1": ["analog", 1],
-    "A2": ["analog", 2]
-}
-
 
 class GrovePiDSLink(DSLink):
+    addresses = {
+        "D2": ["digital", 2],
+        "D3": ["pwm", 3],
+        "D4": ["digital", 4],
+        "D5": ["pwm", 5],
+        "D6": ["pwm", 6],
+        "D7": ["digital", 7],
+        "D8": ["digital", 8],
+        "A0": ["analog", 0],
+        "A1": ["analog", 1],
+        "A2": ["analog", 2],
+        "I2C-1": ["i2c", 1],
+        "I2C-2": ["i2c", 2],
+        "I2C-3": ["i2c", 3]
+    }
+
+    modules = [
+        "LED",
+        "LCD",
+        "Light Sensor",
+        "Rotary Angle Sensor",
+        "Ultrasonic Ranger",
+        "Buzzer",
+        "Sound Sensor",
+        "Button"
+    ]
+
     def start(self):
-        self.profile_manager.create_profile("add_sensor")
-        self.profile_manager.register_callback("add_sensor", self.add_sensor)
+        self.profile_manager.create_profile("add_module")
+        self.profile_manager.register_callback("add_module", self.add_module)
 
-        self.profile_manager.create_profile("add_lcd")
-        self.profile_manager.register_callback("add_lcd", self.add_lcd)
-
-        self.profile_manager.create_profile("remove_sensor")
-        self.profile_manager.register_callback("remove_sensor", self.remove_sensor)
+        self.profile_manager.create_profile("remove_module")
+        self.profile_manager.register_callback("remove_module", self.remove_module)
 
         self.profile_manager.create_profile("set_digital")
         self.profile_manager.register_callback("set_digital", self.set_digital)
@@ -45,45 +56,41 @@ class GrovePiDSLink(DSLink):
     def get_default_nodes(self):
         super_root = self.get_root_node()
 
-        add_sensor = Node("add_sensor", super_root)
-        add_sensor.set_display_name("Add Sensor")
-        add_sensor.set_config("$is", "add_sensor")
-        add_sensor.set_parameters([
+        add_module = Node("add_module", super_root)
+        add_module.set_display_name("Add Module")
+        add_module.set_profile("add_module")
+        add_module.set_parameters([
             {
                 "name": "Name",
                 "type": "string"
             },
             {
-                "name": "Sensor",
-                "type": self.sensor_enum()
+                "name": "Type",
+                "type": self.module_enum()
+            },
+            {
+                "name": "Address",
+                "type": self.address_enum()
             }
         ])
-        add_sensor.set_invokable("config")
-
-        add_lcd = Node("add_lcd", super_root)
-        add_lcd.set_display_name("Add LCD")
-        add_lcd.set_config("$is", "add_lcd")
-        add_lcd.set_parameters([
+        add_module.set_columns([
             {
-                "name": "Name",
+                "name": "Success",
                 "type": "string"
             }
         ])
-        add_lcd.set_invokable("config")
+        add_module.set_invokable("config")
 
-        super_root.add_child(add_sensor)
-        super_root.add_child(add_lcd)
+        super_root.add_child(add_module)
 
         return super_root
 
-    @staticmethod
-    def set_digital(parameters):
-        grovepi.digitalWrite(int(parameters.node.parent.attributes["@address"]), parameters.params["Value"])
+    def set_digital(self, parameters):
+        grovepi.digitalWrite(self.addresses[parameters.node.parent.attributes["@address"]][1], parameters.params["Value"])
         return []
 
-    @staticmethod
-    def set_analog(parameters):
-        grovepi.analogWrite(int(parameters.node.parent.attributes["@address"]), int(parameters.params["Value"]))
+    def set_analog(self, parameters):
+        grovepi.analogWrite(self.addresses[parameters.node.parent.attributes["@address"]][1], int(parameters.params["Value"]))
         return []
 
     @staticmethod
@@ -100,34 +107,73 @@ class GrovePiDSLink(DSLink):
         grove_rgb_led.set_text(text)
         return []
 
-    def add_sensor(self, parameters):
-        sensor_type = sensors[str(parameters.params["Sensor"])][0]
-        address = sensors[parameters.params["Sensor"]][1]
-        sensor = Node(parameters.params["Name"], self.super_root)
-        sensor.set_type("int")
-        sensor.set_attribute("@port", str(parameters.params["Sensor"]))
-        sensor.set_attribute("@address", address)
-        sensor.set_attribute("@type", sensor_type)
-        self.super_root.add_child(sensor)
-        if sensor_type is "digital":
-            sensor.add_child(self.set_digital_node(sensor))
-        elif sensor_type is "analog":
-            sensor.add_child(self.set_analog_node(sensor))
-        elif sensor_type is "pwm":
-            sensor.add_child(self.set_digital_node(sensor))
-            sensor.add_child(self.set_analog_node(sensor))
-        sensor.add_child(self.remove_sensor_node(sensor))
-        return []
+    def add_module(self, parameters):
+        if "Name" not in parameters.params:
+            return [["Invalid name."]]
+        node = Node(str(parameters.params["Name"]), self.super_root)
+        type = parameters.params["Type"]
+        address = parameters.params["Address"]
+        address_type = self.addresses[address][0]
+        node.set_attribute("@module", type)
+        node.set_attribute("@address", address)
+        node.set_attribute("@type", address_type)
+        if type == "LED":
+            if address_type == "pwm":
+                node.add_child(self.set_analog_node(node))
+                node.add_child(self.set_digital_node(node))
+                node.set_type("int")
+            elif address_type == "digital":
+                node.add_child(self.set_digital_node(node))
+                node.set_type("int")
+            else:
+                return [["LED doesn't work on that."]]
+        elif type == "LCD":
+            node.add_child(self.set_rgb_node(node))
+            node.add_child(self.set_text_node(node))
+        elif type == "Light Sensor":
+            if address_type == "analog":
+                node.set_type("int")
+            else:
+                return [["Light Sensor doesn't work on that."]]
+        elif type == "Rotary Angle Sensor":
+            if address_type == "analog":
+                node.set_type("int")
+            else:
+                return [["Rotary Angle Sensor doesn't work on that."]]
+        elif type == "Ultrasonic Ranger":
+            if address_type == "digital" or address_type == "pwm":
+                node.set_type("int")
+            else:
+                return [["Ultrasonic Ranger doesn't work on that."]]
+        elif type == "Buzzer":
+            if address_type == "digital" or address_type == "pwm":
+                node.add_child(self.set_analog_node(node))
+                node.add_child(self.set_digital_node(node))
+                node.set_type("int")
+            else:
+                return [["Buzzer doesn't work on that."]]
+        elif type == "Sound Sensor":
+            if address_type == "analog":
+                node.set_type("int")
+            else:
+                return [["Sound Sensor doesn't work on that."]]
+        elif type == "Button":
+            if address_type == "digital" or address_type == "pwm":
+                node.set_type("int")
+            else:
+                return [["Button doesn't work on that."]]
 
-    def add_lcd(self, parameters):
-        lcd = Node(str(parameters.params["Name"]), self.super_root)
-        lcd.add_child(self.set_rgb_node(lcd))
-        lcd.add_child(self.remove_sensor_node(lcd))
-        lcd.add_child(self.set_text_node(lcd))
-        self.super_root.add_child(lcd)
-        return []
+        node.add_child(self.remove_module_node(node))
 
-    def remove_sensor(self, parameters):
+        self.super_root.add_child(node)
+
+        return [
+            [
+                "Success!"
+            ]
+        ]
+
+    def remove_module(self, parameters):
         self.super_root.remove_child(parameters.node.parent.name)
         return []
 
@@ -160,10 +206,10 @@ class GrovePiDSLink(DSLink):
         return node
 
     @staticmethod
-    def remove_sensor_node(root):
-        node = Node("remove_sensor", root)
-        node.set_display_name("Remove Sensor")
-        node.set_config("$is", "remove_sensor")
+    def remove_module_node(root):
+        node = Node("remove_module", root)
+        node.set_display_name("Remove Module")
+        node.set_config("$is", "remove_module")
         node.set_invokable("config")
         return node
 
@@ -211,17 +257,47 @@ class GrovePiDSLink(DSLink):
         for child_name in self.super_root.children:
             child = self.super_root.children[child_name]
             if "@type" in child.attributes:
-                if child.attributes["@type"] == "pwm":
-                    child.set_value(grovepi.analogRead(child.attributes["@address"]))
+                try:
+                    address = self.addresses[child.attributes["@address"]][1]
+                    port_type = child.attributes["@type"]
+                    module = child.attributes["@module"]
+                    if port_type == "pwm" or port_type == "digital":
+                        if module == "Ultrasonic Ranger":
+                            try:
+                                child.set_value(grovepi.ultrasonicRead(address))
+                            except TypeError:
+                                pass
+                        else:
+                            child.set_value(grovepi.digitalRead(address))
+                    elif port_type == "analog":
+                        if module == "Temp and Humid":
+                            out = grovepi.dht(address, 1)
+                            if type(out) is list:
+                                for i in out:
+                                    print(i)
+                            # child.set_value([temp, humid])
+                        else:
+                            child.set_value(grovepi.analogRead(address))
+                    elif port_type == "i2c":
+                        pass
+                    else:
+                        raise ValueError("Unhandled type %s" % child.attributes["@type"])
+                except IOError:
+                    pass
 
         reactor.callLater(0.1, self.update_values)
 
-    @staticmethod
-    def sensor_enum():
+    def module_enum(self):
         i = []
-        for sensor in sensors:
-            i.append(sensor)
+        for module in self.modules:
+            i.append(module)
+        return Value.build_enum(i)
+
+    def address_enum(self):
+        i = []
+        for address in self.addresses:
+            i.append(address)
         return Value.build_enum(i)
 
 if __name__ == "__main__":
-    GrovePiDSLink(Configuration(name="GrovePi", responder=True))
+    GrovePiDSLink(Configuration(name="GrovePi", responder=True, no_save_nodes=True))
