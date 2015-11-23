@@ -29,7 +29,8 @@ class GrovePiDSLink(DSLink):
         "Ultrasonic Ranger",
         "Buzzer",
         "Sound Sensor",
-        "Button"
+        "Button",
+        "Relay"
     ]
 
     def start(self):
@@ -162,6 +163,12 @@ class GrovePiDSLink(DSLink):
                 node.set_type("int")
             else:
                 return [["Button doesn't work on that."]]
+        elif type == "Relay":
+            if address_type == "digital" or address_type == "pwm":
+                node.add_child(self.set_digital_node(node))
+                node.set_type("int")
+            else:
+                return [["Button doesn't work on that."]]
 
         node.add_child(self.remove_module_node(node))
 
@@ -256,7 +263,7 @@ class GrovePiDSLink(DSLink):
     def update_values(self):
         for child_name in self.super_root.children:
             child = self.super_root.children[child_name]
-            if "@type" in child.attributes:
+            if child.is_subscribed() and "@type" in child.attributes:
                 try:
                     address = self.addresses[child.attributes["@address"]][1]
                     port_type = child.attributes["@type"]
