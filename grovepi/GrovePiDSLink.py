@@ -1,7 +1,14 @@
 from dslink import DSLink, Configuration, Node, Value
-import grovepi
+import dsa_grovepi as grovepi
 import grove_rgb_led
 from twisted.internet import reactor
+
+_NUMERALS = '0123456789abcdefABCDEF'
+_HEXDEC = {v: int(v, 16) for v in (x+y for x in _NUMERALS for y in _NUMERALS)}
+
+
+def rgb(triplet):
+    return _HEXDEC[triplet[0:2]], _HEXDEC[triplet[2:4]], _HEXDEC[triplet[4:6]]
 
 
 class GrovePiDSLink(DSLink):
@@ -46,8 +53,8 @@ class GrovePiDSLink(DSLink):
         self.profile_manager.create_profile("set_analog")
         self.profile_manager.register_callback("set_analog", self.set_analog)
 
-        self.profile_manager.create_profile("set_rgb")
-        self.profile_manager.register_callback("set_rgb", self.set_rgb)
+        self.profile_manager.create_profile("set_color")
+        self.profile_manager.register_callback("set_color", self.set_color)
 
         self.profile_manager.create_profile("set_text")
         self.profile_manager.register_callback("set_text", self.set_text)
@@ -95,10 +102,8 @@ class GrovePiDSLink(DSLink):
         return []
 
     @staticmethod
-    def set_rgb(parameters):
-        red = int(parameters.params["Red"])
-        green = int(parameters.params["Green"])
-        blue = int(parameters.params["Blue"])
+    def set_color(parameters):
+        red, green, blue = rgb(hex(int(parameters.params["Color"]))[2:].zfill(6))
         grove_rgb_led.set_rgb(red, green, blue)
         return []
 
@@ -112,61 +117,64 @@ class GrovePiDSLink(DSLink):
         if "Name" not in parameters.params:
             return [["Invalid name."]]
         node = Node(str(parameters.params["Name"]), self.super_root)
-        type = parameters.params["Type"]
+        module_type = parameters.params["Type"]
         address = parameters.params["Address"]
         address_type = self.addresses[address][0]
-        node.set_attribute("@module", type)
+        node.set_attribute("@module", module_type)
         node.set_attribute("@address", address)
         node.set_attribute("@type", address_type)
-        if type == "LED":
+        if module_type == "LED":
             if address_type == "pwm":
-                node.add_child(self.set_analog_node(node))
-                node.add_child(self.set_digital_node(node))
+                node.add_child(self.set_analog_node(node, name="Set Brightness"))
+                node.add_child(self.set_digital_node(node, name="Toggle"))
                 node.set_type("int")
             elif address_type == "digital":
-                node.add_child(self.set_digital_node(node))
+                node.add_child(self.set_digital_node(node, name="Toggle"))
                 node.set_type("int")
             else:
                 return [["LED doesn't work on that."]]
-        elif type == "LCD":
-            node.add_child(self.set_rgb_node(node))
+        elif module_type == "LCD":
+            node.add_child(self.set_color_node(node))
             node.add_child(self.set_text_node(node))
-        elif type == "Light Sensor":
+        elif module_type == "Light Sensor":
             if address_type == "analog":
                 node.set_type("int")
             else:
                 return [["Light Sensor doesn't work on that."]]
-        elif type == "Rotary Angle Sensor":
+        elif module_type == "Rotary Angle Sensor":
             if address_type == "analog":
                 node.set_type("int")
+                node.set_attribute("display", "percent")
             else:
                 return [["Rotary Angle Sensor doesn't work on that."]]
-        elif type == "Ultrasonic Ranger":
+        elif module_type == "Ultrasonic Ranger":
             if address_type == "digital" or address_type == "pwm":
-                node.set_type("int")
+                node.set_type("number")
+                node.set_attribute("@unit", "cm")
             else:
                 return [["Ultrasonic Ranger doesn't work on that."]]
-        elif type == "Buzzer":
+        elif module_type == "Buzzer":
             if address_type == "digital" or address_type == "pwm":
-                node.add_child(self.set_analog_node(node))
-                node.add_child(self.set_digital_node(node))
-                node.set_type("int")
+                node.add_child(self.set_digital_node(node, name="Toggle"))
+                node.set_type("number")
             else:
                 return [["Buzzer doesn't work on that."]]
-        elif type == "Sound Sensor":
+        elif module_type == "Sound Sensor":
             if address_type == "analog":
-                node.set_type("int")
+                node.set_type("number")
+                node.set_attribute("@unit", "dB")
             else:
                 return [["Sound Sensor doesn't work on that."]]
-        elif type == "Button":
+        elif module_type == "Button":
             if address_type == "digital" or address_type == "pwm":
-                node.set_type("int")
+                node.set_type("number")
             else:
                 return [["Button doesn't work on that."]]
-        elif type == "Relay":
+        elif module_type == "Relay":
             if address_type == "digital" or address_type == "pwm":
-                node.add_child(self.set_digital_node(node))
-                node.set_type("int")
+                grovepi.pinMode(self.addresses[address][1], "OUTPUT")
+                node.add_child(self.set_digital_node(node, name="Toggle"))
+                node.set_type("number")
             else:
                 return [["Button doesn't work on that."]]
 
@@ -185,9 +193,10 @@ class GrovePiDSLink(DSLink):
         return []
 
     @staticmethod
-    def set_digital_node(root):
-        node = Node("set_digital", root)
-        node.set_display_name("Set Digital")
+    def set_digital_node(root, name="Set Digital"):
+        slug = name.replace(" ", "_").lower()
+        node = Node(slug, root)
+        node.set_display_name(name)
         node.set_config("$is", "set_digital")
         node.set_parameters([
             {
@@ -199,9 +208,10 @@ class GrovePiDSLink(DSLink):
         return node
 
     @staticmethod
-    def set_analog_node(root):
-        node = Node("set_analog", root)
-        node.set_display_name("Set Analog")
+    def set_analog_node(root, name="Set Analog"):
+        slug = name.replace(" ", "_").lower()
+        node = Node(slug, root)
+        node.set_display_name(name)
         node.set_config("$is", "set_analog")
         node.set_parameters([
             {
@@ -221,26 +231,14 @@ class GrovePiDSLink(DSLink):
         return node
 
     @staticmethod
-    def set_rgb_node(root):
-        node = Node("set_rgb", root)
-        node.set_display_name("Set RGB")
-        node.set_config("$is", "set_rgb")
-        # TODO(logangorence): Use DGLux color picker.
+    def set_color_node(root):
+        node = Node("set_color", root)
+        node.set_display_name("Set Color")
+        node.set_config("$is", "set_color")
         node.set_parameters([
             {
-                "name": "Red",
-                "type": "int",
-                "default": 255
-            },
-            {
-                "name": "Green",
-                "type": "int",
-                "default": 255
-            },
-            {
-                "name": "Blue",
-                "type": "int",
-                "default": 255
+                "name": "Color",
+                "type": "color",
             }
         ])
         node.set_invokable("write")
@@ -307,4 +305,4 @@ class GrovePiDSLink(DSLink):
         return Value.build_enum(i)
 
 if __name__ == "__main__":
-    GrovePiDSLink(Configuration(name="GrovePi", responder=True))
+    GrovePiDSLink(Configuration(name="GrovePi", responder=True, no_save_nodes=True))
