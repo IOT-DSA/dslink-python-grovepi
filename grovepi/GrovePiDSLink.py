@@ -43,6 +43,10 @@ class GrovePiDSLink(DSLink):
         "Temp and Humid"
     ]
 
+    def __init__(self, config):
+        self.do_restore = True
+        DSLink.__init__(self, config)
+
     def start(self):
         self.profile_manager.create_profile("add_module")
         self.profile_manager.register_callback("add_module", self.add_module)
@@ -50,15 +54,34 @@ class GrovePiDSLink(DSLink):
         self.profile_manager.create_profile("remove_module")
         self.profile_manager.register_callback("remove_module", self.remove_module)
 
-        self.profile_manager.create_profile("set_digital")
-        self.profile_manager.register_callback("set_digital", self.set_digital)
-
-        self.profile_manager.create_profile("set_analog")
-        self.profile_manager.register_callback("set_analog", self.set_analog)
+        if self.restore:
+            self.restore(self.super_root)
 
         reactor.callLater(0.1, self.update_values)
 
+    def restore(self, node):
+        for child_name in node.children:
+            child = node.children[child_name]
+            if node.children:
+                self.restore(child)
+            if "@callback" in child.attributes:
+                if child.attributes["@callback"] == "module":
+                    child.set_value_callback = self.set_value
+                elif child.attributes["@callback"] == "rgb_text":
+                    child.set_value_callback = self.set_text
+                elif child.attributes["@callback"] == "rgb_color":
+                    child.set_value_callback = self.set_color
+            if "@mode" in child.attributes and "@address":
+                mode = child.attributes["@mode"]
+                address = self.addresses[child.attributes["@address"]][1]
+                if mode == "output":
+                    grovepi.pinMode(address, "OUTPUT")
+                    print "restoring %s" % child.name
+                elif mode == "input":
+                    grovepi.pinMode(address, "INPUT")
+
     def get_default_nodes(self):
+        self.do_restore = False
         super_root = self.get_root_node()
 
         add_module = Node("add_module", super_root)
@@ -108,21 +131,6 @@ class GrovePiDSLink(DSLink):
                 node.set_value(value)
                 grovepi.analogWrite(self.addresses[node.attributes["@address"]][1], self.percent_to_analog(value))
 
-    def set_digital(self, parameters):
-        parameters.node.parent.set_value(parameters.params["Value"])
-        grovepi.digitalWrite(self.addresses[parameters.node.parent.attributes["@address"]][1], parameters.params["Value"])
-        return []
-
-    def set_analog(self, parameters):
-        value = float(parameters.params["Value"])
-        if parameters.node.parent.attributes["@type"] == "pwm":
-            parameters.node.parent.set_value(value)
-            grovepi.analogWrite(self.addresses[parameters.node.parent.attributes["@address"]][1], self.percent_to_pwm(value))
-        else:
-            parameters.node.parent.set_value(value)
-            grovepi.analogWrite(self.addresses[parameters.node.parent.attributes["@address"]][1], self.percent_to_analog(value))
-        return []
-
     def set_color(self, node, value):
         red, green, blue = rgb(hex(int(value))[2:].zfill(6))
         grove_rgb_led.set_rgb(red, green, blue)
@@ -137,6 +145,7 @@ class GrovePiDSLink(DSLink):
         if "Name" not in parameters.params:
             return [["Invalid name."]]
         node = Node(str(parameters.params["Name"]), self.super_root)
+        node.set_attribute("@callback", "module")
         module_type = parameters.params["Type"]
         address = parameters.params["Address"]
         address_type = self.addresses[address][0]
@@ -160,7 +169,6 @@ class GrovePiDSLink(DSLink):
         elif module_type == "RGB LCD":
             node.add_child(self.color_node(node))
             node.add_child(self.text_node(node))
-            node.set_attribute("@mode", "output")
         elif module_type == "Light Sensor":
             if address_type == "analog":
                 node.set_type("number")
@@ -275,7 +283,8 @@ class GrovePiDSLink(DSLink):
         return node
 
     def color_node(self, root):
-        node = Node("set_color", root)
+        node = Node("color", root)
+        node.set_attribute("@callback", "rgb_color")
         node.set_display_name("Color")
         node.set_type("dynamic")
         node.set_config("$editor", "color")
@@ -285,8 +294,10 @@ class GrovePiDSLink(DSLink):
 
     def text_node(self, root):
         node = Node("text", root)
+        node.set_attribute("@callback", "rgb_text")
         node.set_display_name("Text")
         node.set_type("string")
+
         node.set_config("$writable", "write")
         node.set_value_callback = self.set_text
         return node
