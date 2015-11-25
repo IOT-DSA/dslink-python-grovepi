@@ -76,7 +76,6 @@ class GrovePiDSLink(DSLink):
                 address = self.addresses[child.attributes["@address"]][1]
                 if mode == "output":
                     grovepi.pinMode(address, "OUTPUT")
-                    print "restoring %s" % child.name
                 elif mode == "input":
                     grovepi.pinMode(address, "INPUT")
 

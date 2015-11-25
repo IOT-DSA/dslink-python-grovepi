@@ -60,13 +60,31 @@ def text_command(cmd):
     bus.write_byte_data(DISPLAY_TEXT_ADDR, 0x80, cmd)
 
 
-def set_text(text):
+def blank_screen():
+    """
+    Clear the screen without flashing.
+    :return:
+    """
+    text_command(0x02)
+    for i in range(32):
+        bus.write_byte_data(DISPLAY_TEXT_ADDR, 0x40, ord(" "))
+    text_command(0x02)
+
+
+def set_text(input_text):
     """
     Set the display's text, auto wrap or \n for newline.
-    :param text: Text to display.
+    :param input_text: Text to display.
     """
-    text = text.replace("\\n", "\n")
-    text_command(0x01)  # Clear display.
+    i = input_text.split("\\n")
+    text = ""
+    print(len(i))
+    for j in i:
+        j = j.ljust(16)
+        text += j
+    text = text.ljust(32)
+    print(text)
+    text_command(0x02)  # Reset cursor's position
     time.sleep(0.05)
     text_command(0x08 | 0x04)  # Display on, no cursor.
     text_command(0x28)  # 2 lines.
