@@ -2,6 +2,7 @@ from collections import OrderedDict
 from dslink import DSLink, Configuration, Node, Value
 import dsa_grovepi as grovepi
 import grove_rgb_led
+from math import isnan
 from twisted.internet import reactor
 
 _NUMERALS = '0123456789abcdefABCDEF'
@@ -208,7 +209,8 @@ class GrovePiDSLink(DSLink):
         elif module_type == "Temp and Humid":
             if address_type == "digital" or address_type == "pwm":
                 grovepi.pinMode(self.addresses[address][1], "INPUT")
-                node.set_type("array")
+                node.add_child(self.temp_node(node))
+                node.add_child(self.humid_node(node))
                 node.set_attribute("@mode", "input")
 
         node.add_child(self.remove_module_node(node))
@@ -280,6 +282,20 @@ class GrovePiDSLink(DSLink):
         node.set_value_callback = self.set_text
         return node
 
+    def temp_node(self, root):
+        node = Node("temp", root)
+        node.set_display_name("Temperature")
+        node.set_type("number")
+        node.set_attribute("@unit", "C")
+        return node
+
+    def humid_node(self, root):
+        node = Node("humid", root)
+        node.set_display_name("Humidity")
+        node.set_type("number")
+        node.set_attribute("@unit", "%")
+        return node
+
     def update_values(self):
         for child_name in self.super_root.children:
             child = self.super_root.children[child_name]
@@ -296,8 +312,9 @@ class GrovePiDSLink(DSLink):
                                 pass
                         elif module == "Temp and Humid":
                             dht = grovepi.dht(address, 0)
-                            if type(dht) is list:
-                                child.set_value(dht)
+                            if type(dht) is list and not isnan(dht[0]) and not isnan(dht[1]):
+                                child.get("/temp").set_value(dht[0])
+                                child.get("/humid").set_value(dht[1])
                         else:
                             child.set_value(bool(grovepi.digitalRead(address)))
                     elif port_type == "analog":
