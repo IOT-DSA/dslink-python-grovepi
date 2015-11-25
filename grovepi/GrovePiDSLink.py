@@ -94,10 +94,12 @@ class GrovePiDSLink(DSLink):
         return super_root
 
     def set_digital(self, parameters):
+        print("writing digital")
         grovepi.digitalWrite(self.addresses[parameters.node.parent.attributes["@address"]][1], parameters.params["Value"])
         return []
 
     def set_analog(self, parameters):
+        print("writing analog")
         grovepi.analogWrite(self.addresses[parameters.node.parent.attributes["@address"]][1], int(parameters.params["Value"]))
         return []
 
@@ -125,10 +127,12 @@ class GrovePiDSLink(DSLink):
         node.set_attribute("@type", address_type)
         if module_type == "LED":
             if address_type == "pwm":
+                grovepi.pinMode(self.addresses[address][1], "OUTPUT")
                 node.add_child(self.set_analog_node(node, name="Set Brightness"))
                 node.add_child(self.set_digital_node(node, name="Toggle"))
                 node.set_type("int")
             elif address_type == "digital":
+                grovepi.pinMode(self.addresses[address][1], "OUTPUT")
                 node.add_child(self.set_digital_node(node, name="Toggle"))
                 node.set_type("int")
             else:
@@ -143,30 +147,35 @@ class GrovePiDSLink(DSLink):
                 return [["Light Sensor doesn't work on that."]]
         elif module_type == "Rotary Angle Sensor":
             if address_type == "analog":
+                grovepi.pinMode(self.addresses[address][1], "INPUT")
                 node.set_type("int")
                 node.set_attribute("display", "percent")
             else:
                 return [["Rotary Angle Sensor doesn't work on that."]]
         elif module_type == "Ultrasonic Ranger":
             if address_type == "digital" or address_type == "pwm":
+                grovepi.pinMode(self.addresses[address][1], "INPUT")
                 node.set_type("number")
                 node.set_attribute("@unit", "cm")
             else:
                 return [["Ultrasonic Ranger doesn't work on that."]]
         elif module_type == "Buzzer":
             if address_type == "digital" or address_type == "pwm":
+                grovepi.pinMode(self.addresses[address][1], "OUTPUT")
                 node.add_child(self.set_digital_node(node, name="Toggle"))
                 node.set_type("number")
             else:
                 return [["Buzzer doesn't work on that."]]
         elif module_type == "Sound Sensor":
             if address_type == "analog":
+                grovepi.pinMode(self.addresses[address][1], "INPUT")
                 node.set_type("number")
                 node.set_attribute("@unit", "dB")
             else:
                 return [["Sound Sensor doesn't work on that."]]
         elif module_type == "Button":
             if address_type == "digital" or address_type == "pwm":
+                grovepi.pinMode(self.addresses[address][1], "INPUT")
                 node.set_type("number")
             else:
                 return [["Button doesn't work on that."]]
