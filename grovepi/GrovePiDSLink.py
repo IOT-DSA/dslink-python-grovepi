@@ -55,12 +55,6 @@ class GrovePiDSLink(DSLink):
         self.profile_manager.create_profile("set_analog")
         self.profile_manager.register_callback("set_analog", self.set_analog)
 
-        self.profile_manager.create_profile("set_color")
-        self.profile_manager.register_callback("set_color", self.set_color)
-
-        self.profile_manager.create_profile("set_text")
-        self.profile_manager.register_callback("set_text", self.set_text)
-
         reactor.callLater(0.1, self.update_values)
 
     def get_default_nodes(self):
@@ -117,15 +111,13 @@ class GrovePiDSLink(DSLink):
             grovepi.analogWrite(self.addresses[parameters.node.parent.attributes["@address"]][1], self.percent_to_analog(value))
         return []
 
-    @staticmethod
-    def set_color(parameters):
-        red, green, blue = rgb(hex(int(parameters.params["Color"]))[2:].zfill(6))
+    def set_color(self, node, value):
+        red, green, blue = rgb(hex(int(value))[2:].zfill(6))
         grove_rgb_led.set_rgb(red, green, blue)
         return []
 
-    @staticmethod
-    def set_text(parameters):
-        text = str(parameters.params["Text"])
+    def set_text(self, node, value):
+        text = str(value)
         grove_rgb_led.set_text(text)
         return []
 
@@ -154,8 +146,8 @@ class GrovePiDSLink(DSLink):
             else:
                 return [["LED doesn't work on that."]]
         elif module_type == "LCD":
-            node.add_child(self.set_color_node(node))
-            node.add_child(self.set_text_node(node))
+            node.add_child(self.color_node(node))
+            node.add_child(self.text_node(node))
             node.set_attribute("@mode", "output")
         elif module_type == "Light Sensor":
             if address_type == "analog":
@@ -271,32 +263,21 @@ class GrovePiDSLink(DSLink):
         node.set_invokable("config")
         return node
 
-    @staticmethod
-    def set_color_node(root):
+    def color_node(self, root):
         node = Node("set_color", root)
-        node.set_display_name("Set Color")
-        node.set_config("$is", "set_color")
-        node.set_parameters([
-            {
-                "name": "Color",
-                "type": "color",
-            }
-        ])
-        node.set_invokable("write")
+        node.set_display_name("Color")
+        node.set_type("dynamic")
+        node.set_config("$editor", "color")
+        node.set_config("$writable", "write")
+        node.set_value_callback = self.set_color
         return node
 
-    @staticmethod
-    def set_text_node(root):
-        node = Node("set_text", root)
-        node.set_display_name("Set Text")
-        node.set_config("$is", "set_text")
-        node.set_parameters([
-            {
-                "name": "Text",
-                "type": "string"
-            }
-        ])
-        node.set_invokable("write")
+    def text_node(self, root):
+        node = Node("text", root)
+        node.set_display_name("Text")
+        node.set_type("string")
+        node.set_config("$writable", "write")
+        node.set_value_callback = self.set_text
         return node
 
     def update_values(self):
