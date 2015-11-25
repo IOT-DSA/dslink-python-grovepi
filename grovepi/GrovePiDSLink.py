@@ -32,7 +32,7 @@ class GrovePiDSLink(DSLink):
 
     modules = [
         "LED",
-        "LCD",
+        "RGB LCD",
         "Light Sensor",
         "Rotary Angle Sensor",
         "Ultrasonic Ranger",
@@ -157,7 +157,7 @@ class GrovePiDSLink(DSLink):
                 node.set_attribute("@mode", "output")
             else:
                 return [["Requires pwm or digital"]]
-        elif module_type == "LCD":
+        elif module_type == "RGB LCD":
             node.add_child(self.color_node(node))
             node.add_child(self.text_node(node))
             node.set_attribute("@mode", "output")
@@ -320,7 +320,9 @@ class GrovePiDSLink(DSLink):
                             except TypeError:
                                 pass
                         else:
-                            child.set_value(bool(grovepi.digitalRead(address)))
+                            val = grovepi.digitalRead(address)
+                            if val != 255:
+                                child.set_value(bool(val))
                     elif port_type == "analog":
                         child.set_value(self.analog_to_percent(grovepi.analogRead(address)))
                     elif port_type == "i2c":
