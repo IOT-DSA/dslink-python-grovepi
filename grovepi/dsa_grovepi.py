@@ -200,7 +200,6 @@ def digitalRead(pin):
 
 # Arduino Digital Write
 def digitalWrite(pin, value):
-    print("writing value on %i" % pin)
     write_i2c_block(address, dWrite_cmd + [pin, value, unused])
     return 1
 

@@ -37,7 +37,8 @@ class GrovePiDSLink(DSLink):
         "Buzzer",
         "Sound Sensor",
         "Button",
-        "Relay"
+        "Relay",
+        "Temp and Humid"
     ]
 
     def start(self):
@@ -94,12 +95,10 @@ class GrovePiDSLink(DSLink):
         return super_root
 
     def set_digital(self, parameters):
-        print("writing digital")
         grovepi.digitalWrite(self.addresses[parameters.node.parent.attributes["@address"]][1], parameters.params["Value"])
         return []
 
     def set_analog(self, parameters):
-        print("writing analog")
         grovepi.analogWrite(self.addresses[parameters.node.parent.attributes["@address"]][1], int(parameters.params["Value"]))
         return []
 
@@ -129,20 +128,23 @@ class GrovePiDSLink(DSLink):
             if address_type == "pwm":
                 grovepi.pinMode(self.addresses[address][1], "OUTPUT")
                 node.add_child(self.set_analog_node(node, name="Set Brightness"))
-                node.add_child(self.set_digital_node(node, name="Toggle"))
                 node.set_type("int")
+                node.set_attribute("@mode", "output")
             elif address_type == "digital":
                 grovepi.pinMode(self.addresses[address][1], "OUTPUT")
                 node.add_child(self.set_digital_node(node, name="Toggle"))
                 node.set_type("int")
+                node.set_attribute("@mode", "output")
             else:
                 return [["LED doesn't work on that."]]
         elif module_type == "LCD":
             node.add_child(self.set_color_node(node))
             node.add_child(self.set_text_node(node))
+            node.set_attribute("@mode", "output")
         elif module_type == "Light Sensor":
             if address_type == "analog":
                 node.set_type("int")
+                node.set_attribute("@mode", "input")
             else:
                 return [["Light Sensor doesn't work on that."]]
         elif module_type == "Rotary Angle Sensor":
@@ -150,6 +152,7 @@ class GrovePiDSLink(DSLink):
                 grovepi.pinMode(self.addresses[address][1], "INPUT")
                 node.set_type("int")
                 node.set_attribute("display", "percent")
+                node.set_attribute("@mode", "input")
             else:
                 return [["Rotary Angle Sensor doesn't work on that."]]
         elif module_type == "Ultrasonic Ranger":
@@ -157,13 +160,16 @@ class GrovePiDSLink(DSLink):
                 grovepi.pinMode(self.addresses[address][1], "INPUT")
                 node.set_type("number")
                 node.set_attribute("@unit", "cm")
+                node.set_attribute("@mode", "input")
             else:
                 return [["Ultrasonic Ranger doesn't work on that."]]
         elif module_type == "Buzzer":
             if address_type == "digital" or address_type == "pwm":
                 grovepi.pinMode(self.addresses[address][1], "OUTPUT")
                 node.add_child(self.set_digital_node(node, name="Toggle"))
+                node.add_child(self.set_analog_node(node, name="Set Frequency"))
                 node.set_type("number")
+                node.set_attribute("@mode", "output")
             else:
                 return [["Buzzer doesn't work on that."]]
         elif module_type == "Sound Sensor":
@@ -171,12 +177,14 @@ class GrovePiDSLink(DSLink):
                 grovepi.pinMode(self.addresses[address][1], "INPUT")
                 node.set_type("number")
                 node.set_attribute("@unit", "dB")
+                node.set_attribute("@mode", "input")
             else:
                 return [["Sound Sensor doesn't work on that."]]
         elif module_type == "Button":
             if address_type == "digital" or address_type == "pwm":
                 grovepi.pinMode(self.addresses[address][1], "INPUT")
                 node.set_type("number")
+                node.set_attribute("@mode", "input")
             else:
                 return [["Button doesn't work on that."]]
         elif module_type == "Relay":
@@ -184,8 +192,14 @@ class GrovePiDSLink(DSLink):
                 grovepi.pinMode(self.addresses[address][1], "OUTPUT")
                 node.add_child(self.set_digital_node(node, name="Toggle"))
                 node.set_type("number")
+                node.set_attribute("@mode", "output")
             else:
                 return [["Button doesn't work on that."]]
+        elif module_type == "Temp and Humid":
+            if address_type == "digital" or address_type == "pwm":
+                grovepi.pinMode(self.addresses[address][1], "INPUT")
+                node.set_type("array")
+                node.set_attribute("@mode", "input")
 
         node.add_child(self.remove_module_node(node))
 
@@ -270,7 +284,7 @@ class GrovePiDSLink(DSLink):
     def update_values(self):
         for child_name in self.super_root.children:
             child = self.super_root.children[child_name]
-            if child.is_subscribed() and "@type" in child.attributes:
+            if child.is_subscribed() and "@type" in child.attributes and "@mode" in child.attributes and child.attributes["@mode"] == "input":
                 try:
                     address = self.addresses[child.attributes["@address"]][1]
                     port_type = child.attributes["@type"]
@@ -281,17 +295,14 @@ class GrovePiDSLink(DSLink):
                                 child.set_value(grovepi.ultrasonicRead(address))
                             except TypeError:
                                 pass
+                        elif module == "Temp and Humid":
+                            dht = grovepi.dht(address, 0)
+                            if type(dht) is list:
+                                child.set_value(dht)
                         else:
                             child.set_value(grovepi.digitalRead(address))
                     elif port_type == "analog":
-                        if module == "Temp and Humid":
-                            out = grovepi.dht(address, 1)
-                            if type(out) is list:
-                                for i in out:
-                                    print(i)
-                            # child.set_value([temp, humid])
-                        else:
-                            child.set_value(grovepi.analogRead(address))
+                        child.set_value(grovepi.analogRead(address))
                     elif port_type == "i2c":
                         pass
                     else:
@@ -314,4 +325,4 @@ class GrovePiDSLink(DSLink):
         return Value.build_enum(i)
 
 if __name__ == "__main__":
-    GrovePiDSLink(Configuration(name="GrovePi", responder=True, no_save_nodes=True))
+    GrovePiDSLink(Configuration(name="GrovePi", responder=True))
