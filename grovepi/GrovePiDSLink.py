@@ -308,8 +308,8 @@ class GrovePiDSLink(DSLink):
     def update_values(self):
         for child_name in self.super_root.children:
             child = self.super_root.children[child_name]
-            if child.is_subscribed() and "@type" in child.attributes and "@mode" in child.attributes and child.attributes["@mode"] == "input":
-                try:
+            try:
+                if child.is_subscribed() and "@type" in child.attributes and "@mode" in child.attributes and child.attributes["@mode"] == "input":
                     address = self.addresses[child.attributes["@address"]][1]
                     port_type = child.attributes["@type"]
                     module = child.attributes["@module"]
@@ -319,11 +319,6 @@ class GrovePiDSLink(DSLink):
                                 child.set_value(grovepi.ultrasonicRead(address))
                             except TypeError:
                                 pass
-                        elif module == "Temp and Humid":
-                            dht = grovepi.dht(address, 0)
-                            if type(dht) is list and not isnan(dht[0]) and not isnan(dht[1]):
-                                child.get("/temp").set_value(dht[0])
-                                child.get("/humid").set_value(dht[1])
                         else:
                             child.set_value(bool(grovepi.digitalRead(address)))
                     elif port_type == "analog":
@@ -332,10 +327,25 @@ class GrovePiDSLink(DSLink):
                         pass
                     else:
                         raise ValueError("Unhandled type %s" % child.attributes["@type"])
-                except IOError:
-                    pass
+                elif "@type" in child.attributes and "@mode" in child.attributes and child.attributes["@mode"] == "input":
+                    module = child.attributes["@module"]
+                    address = self.addresses[child.attributes["@address"]][1]
+                    if module == "Temp and Humid":
+                        temp = child.get("/temp")
+                        humid = child.get("/humid")
+                        if temp.is_subscribed() or humid.is_subscribed():
+                            dht = grovepi.dht(address, 0)
+                            if type(dht) is list and not isnan(dht[0]) and not isnan(dht[1]):
+                                temp.set_value(dht[0])
+                                humid.set_value(dht[1])
 
+            except IOError:
+                pass
+
+        if self.super_root.get("/poll_speed").get_value() is None:
+            self.super_root.get("/poll_speed").set_value(0.1)
         reactor.callLater(self.super_root.get("/poll_speed").get_value(), self.update_values)
+
 
     def module_enum(self):
         i = []
