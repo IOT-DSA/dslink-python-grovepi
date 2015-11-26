@@ -1,0 +1,21 @@
+{
+  "name": "dslink-python-grovepi",
+  "version": "0.1.0",
+  "description": "DSLink for GrovePi",
+  "main": "grovepi/GrovePiDSLink.py",
+  "engines": {
+    "packages/bin/python": ">=2.7.0"
+  },
+  "getDependencies": [
+    "virtualenv packages",
+    "packages/bin/python setup.py install"
+  ],
+  "configs": {
+    "broker": {
+      "type": "url"
+    },
+    "token": {
+      "type": "string"
+    }
+  }
+}
